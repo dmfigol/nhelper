@@ -1,0 +1,44 @@
+0.0.0.0/8	"This" Network
+10.0.0.0/8	Private-Use Networks
+127.0.0.0/8	Loopback
+169.254.0.0/16	Link Local
+172.16.0.0/12	Private-Use Networks
+192.0.0.0/24	IETF Protocol Assignments
+192.0.2.0/24	TEST-NET-1
+192.88.99.0/24	6to4 Relay Anycast
+192.168.0.0/16	Private-Use Networks
+198.18.0.0/15	Network Interconnect, Device Benchmark Testing
+198.51.100.0/24	TEST-NET-2
+203.0.113.0/24	TEST-NET-3
+224.0.0.0/4	Multicast
+240.0.0.0/4	Reserved for Future Use
+255.255.255.255/32	Limited Broadcast 
+224.0.0.0	Base address (reserved)
+224.0.0.1	The All Hosts multicast group addresses all hosts on the same network segment.
+224.0.0.2	The All Routers multicast group addresses all routers on the same network segment.
+224.0.0.4	This address is used in the Distance Vector Multicast Routing Protocol (DVMRP) to address multicast routers.
+224.0.0.5	The Open Shortest Path First (OSPF) All OSPF Routers address is used to send Hello packets to all OSPF routers on a network segment.
+224.0.0.6	The OSPF All Designated Routers ""(DR)"" address is used to send OSPF routing information to designated routers on a network segment.
+224.0.0.9	The Routing Information Protocol (RIP) version 2 group address is used to send routing information to all RIP2-aware routers on a network segment.
+224.0.0.10	The Enhanced Interior Gateway Routing Protocol (EIGRP) group address is used to send routing information to all EIGRP routers on a network segment.
+224.0.0.13	Protocol Independent Multicast (PIM) Version 2
+224.0.0.18	Virtual Router Redundancy Protocol (VRRP)
+224.0.0.19	IS-IS over IP
+224.0.0.20	IS-IS over IP
+224.0.0.21	IS-IS over IP
+224.0.0.22	Internet Group Management Protocol (IGMP) version 3[2]
+224.0.0.102	Hot Standby Router Protocol version 2 (HSRPv2) / Gateway Load Balancing Protocol (GLBP)
+224.0.0.107	Precision Time Protocol version 2 peer delay measurement messaging
+224.0.0.251	Multicast DNS (mDNS) address
+224.0.0.252	Link-local Multicast Name Resolution (LLMNR) address
+224.0.0.253	Teredo tunneling client discovery address[3]
+224.0.1.1	Network Time Protocol clients listen on this address for protocol messages when operating in multicast mode.
+224.0.1.39	The Cisco multicast router AUTO-RP-ANNOUNCE address is used by RP mapping agents to listen for candidate announcements.
+224.0.1.40	The Cisco multicast router AUTO-RP-DISCOVERY address is the destination address for messages from the RP mapping agent to discover candidates.
+224.0.1.41	H.323 Gatekeeper discovery address
+224.0.1.129	Precision Time Protocol version 1 time announcements
+224.0.1.130	Precision Time Protocol version 1 time announcements
+224.0.1.131	Precision Time Protocol version 1 time announcements
+224.0.1.132	Precision Time Protocol version 1 time announcements
+224.0.1.129	Precision Time Protocol version 2 time announcements
+239.255.255.250	Simple Service Discovery Protocol address
