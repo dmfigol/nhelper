@@ -75,6 +75,26 @@ def convert_mask(netmask, view=None):
             octets = [str(int(octet, 2)) for octet in netmask.split('.')]
             return '.'.join(octets)
 
+    elif re.match('^[01]{32}$', netmask):
+        netmask = list(netmask)
+        for i in range(1, 4):
+            netmask.insert(32 - 8 * i, '.')
+        netmask = ''.join(netmask)
+        if view == 'binary':
+            return netmask
+        elif view == 'slash':
+            count = 0
+            for symbol in netmask:
+                if symbol == '1':
+                    count += 1
+                elif symbol == '0':
+                    break
+            return '/%d' % count
+        elif not view or view == 'decimal':
+            octets = [str(int(octet, 2)) for octet in netmask.split('.')]
+            return '.'.join(octets)
+
+
     elif re.match('(\d+\.){3}\d+$', netmask):
         if view == 'decimal':
             return netmask
@@ -86,10 +106,25 @@ def convert_mask(netmask, view=None):
         elif not view or view == 'slash':
             return convert_mask(bin_form, 'slash')
     else:
-        print 'wrong input'
+        print('wrong input')
 
 def summarize_subnets(subnets, view='decimal', smart=False):
     pass
+
+def convert_to_wildcard(ip, view='decimal'):
+    """Returns inverted ip address in the given notation.
+    Input:
+      ip - ip address in binary form
+      view - string, desired notation. Can be one of three:
+            'decimal', 'slash' or 'binary'
+    Output:
+      string - ip address in the given notation
+    """
+    ip = int(ip.replace('.', ''), 2)
+    all_ones_mask = int(convert_mask("255.255.255.255", 'binary')
+                    .replace('.', ''), 2)
+    wildcard = bin(ip ^ all_ones_mask)[2:].zfill(32)
+    return convert_mask(wildcard, view)
 
 class IPAddress(object):
     """Ip address model with a lot of helper functions,
@@ -104,6 +139,7 @@ class IPAddress(object):
         """Raise if input ip notation is wrong
         """
         pass
+
 
     def __init__(self, ip_address, version='ipv4'):
         """Initializes instance of IPAddress class.
@@ -173,6 +209,18 @@ class IPAddress(object):
                 return class_info[self.get_class()][0]
         elif self.version == 'ipv6':
             pass
+
+    def get_wildcard(self, view='decimal'):
+        """Returns a wildcard for the mask of given ip address in the
+        given view.
+        If the ip address does not have mask, returns '0.0.0.0'
+        Input:
+          view - string, desired notation. Can be one of three:
+          'decimal', 'slash' or 'binary' 
+        """
+        if not self.mask:
+            return convert_mask('0.0.0.0', view)
+        return convert_to_wildcard(self.mask_binary, view)
 
     def is_in_subnet(self, subnet):
         """Shows if ip belongs to the given subnet
@@ -271,6 +319,18 @@ class IPAddress(object):
         except:
             return False
 
+    def __str__(self):
+        return self.ip
+
+    def __add__(self, other):
+        new_ip = bin(int(self.ip_binary, 2) + other)[2:].zfill(32)
+        return IPAddress(convert_mask(new_ip))
+
+    def __sub__(self, other):
+        new_ip = bin(int(self.ip_binary, 2) - other)[2:].zfill(32)
+        return IPAddress(convert_mask(new_ip))
+
+
 class Subnet(IPAddress):
     """Model of a subnet with a lot of helper functions,
     like: dividing subnet using VLSM, subnet summarization,
@@ -298,5 +358,111 @@ class Subnet(IPAddress):
         self.mask = self.get_mask()
         self.mask_binary = convert_mask(self.mask, 'binary').replace('.', '')
 
+    def get_first_address(self):
+        """Returns the first usable host address in the subnet.
+        If subnet is /32 returns exact ip address.
+        Input: None
+        Output: IPAddress object"""
+        if (convert_mask(self.get_mask(), view="slash")) == '/32':
+            return self
+        return self + 1
 
-    # TODO: other methods
+    def get_broadcast_address(self):
+        """Returns the broadcast address of the subnet.
+        If subnet is /32 returns exact ip address.
+        Input: None
+        Output: IPAddress object"""
+        if (convert_mask(self.get_mask(), view="slash")) == '/32':
+            return self
+        network_binary = int(self.ip_binary, 2)
+        all_ones_mask = int(convert_mask(self.get_wildcard(), 'binary')
+                        .replace('.', ''), 2)
+        broadcast_address = bin(network_binary | all_ones_mask)[2:].zfill(32)
+        return IPAddress(convert_mask(broadcast_address))
+
+    def get_last_address(self):
+        """Returns the last usable host address in the subnet.
+        If subnet is /32 returns exact ip address.
+        Input: None
+        Output: IPAddress object"""
+        if (convert_mask(self.get_mask(), view="slash")) == '/32':
+            return self
+        return self.get_broadcast_address() - 1
+
+class NetworkDevice(object):
+    def __init__(self, name):
+        self.name = name
+        self.interfaces = []
+
+    def __str__(self):
+        return self.name
+
+    def build_config(self):
+        config = "hostname {name}\n".format(name = self.name)
+        config += self.build_config_interfaces()
+        return config
+
+    def add_interface(self, interface):
+        if interface in self.interfaces:
+            print("%s already exists" % interface)
+        else:
+            self.interfaces.append(interface)
+
+    def build_config_interfaces(self):
+        result = [interface.build_config() for interface in self.interfaces]
+        return '\n'.join(result)
+
+class Router(NetworkDevice):
+    def __init__(self, name):
+        super(Router, self).__init__(name)
+        self.type = "router"   
+
+class Switch(NetworkDevice):
+    def __init__(self, name):
+        super(Switch, self).__init__(name)
+        self.type = "switch"
+        self.vlans = set()  
+
+
+class Interface(object):
+    def __init__(self, name, ip_address=None, vlan=None):
+        self.name = name
+        self.up = True
+        self.type = None
+        self.ip_address = None
+        if ip_address:
+            self.ip_address = ip_address
+        if vlan:
+            if vlan == "trunk":
+                self.type = "trunk"
+            else:
+                self.type = "access"
+                self.vlan = vlan
+
+    def build_config(self):
+        config = ["interface {name}".format(name = self.name)]
+        if self.ip_address:
+            config.append(" ip address {ip} {mask}"
+            .format(ip = self.ip_address.ip, mask = self.ip_address.get_mask()))
+        if self.type:
+            if self.type == "trunk":
+                config.append(" switchport trunk encapsulation dot1q")
+                config.append(" switchport mode trunk")
+                config.append(" switchport nonegotiate")
+            else:
+                config.append(" switchport mode access")
+                config.append(" switchport access vlan {vlan}"
+                              .format(vlan = self.vlan))
+                config.append(" spanning-tree portfast")
+        if self.up:
+            config.append(" no shutdown")
+        else:
+            config.append(" shutdown")
+        config.append("!")
+        return '\n'.join(config)
+
+    def __str__(self):
+        return self.name
+
+    def __eq__(self, other):
+        return self.name == other.name
