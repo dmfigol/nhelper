@@ -4,6 +4,10 @@
 # this module contains some basic helper functions
 # like network division, netmask recalculation
 import re
+import random
+import json
+import os
+import jinja2
 
 ipv4 = [{}, {}]
 ipv6 = [{}, {}]
@@ -17,6 +21,16 @@ class_info = {'A': ['255.0.0.0', 'Class A'],
               'E': ['', 'Experimental'],}
 
 IPV4_RE = re.compile(r'((\d+\.){3}\d+)(\/\d+| +(\d+\.){3}\d+| *- *(\d+\.){3}\d+)?')
+
+INTERFACES = ['FastEthernet', 'GigabitEthernet', 'Ethernet', 'Loopback',
+              'Serial', 'Vlan']
+
+def autocomplete_interface(full_name):
+    match = re.search('^([a-zA-Z]+)([0-9/].*)$', full_name)
+    for interface in INTERFACES:
+        if interface.lower().startswith(match.group(1)):
+            return '{interface}{number}'.format(interface = interface,
+                                                number = match.group(2))
 
 def load_ip_address_description():
     def helper(filename, hashmap):
@@ -125,6 +139,11 @@ def convert_to_wildcard(ip, view='decimal'):
                     .replace('.', ''), 2)
     wildcard = bin(ip ^ all_ones_mask)[2:].zfill(32)
     return convert_mask(wildcard, view)
+
+def get_input_topology(path):
+    with open(path) as f:
+        topology = json.load(f)
+    return topology
 
 class IPAddress(object):
     """Ip address model with a lot of helper functions,
@@ -390,16 +409,31 @@ class Subnet(IPAddress):
         return self.get_broadcast_address() - 1
 
 class NetworkDevice(object):
-    def __init__(self, name):
+    def __init__(self, name, jinja_env):
         self.name = name
         self.interfaces = []
+        self.type = None
+        self.domain_name = "cisco.com"
+        self.vendor = "cisco"
+        self.jinja_env = jinja_env
+
 
     def __str__(self):
         return self.name
 
+    def set_domain_name(self, domain):
+        if domain:
+            self.domain_name = domain
+
+    def generate_ssh_config(self):
+        template = self.jinja_env.get_template("cisco/ssh.cfg")
+        return template.render(domain=self.domain_name)
+
+
     def build_config(self):
         config = "hostname {name}\n".format(name = self.name)
         config += self.build_config_interfaces()
+        config += self.generate_ssh_config()
         return config
 
     def add_interface(self, interface):
@@ -407,39 +441,84 @@ class NetworkDevice(object):
             print("%s already exists" % interface)
         else:
             self.interfaces.append(interface)
+            if self.type == "switch" and interface.type == "access":
+                self.add_vlan_from_interface(interface)
 
-    def build_config_interfaces(self):
-        result = [interface.build_config() for interface in self.interfaces]
-        return '\n'.join(result)
+    def build_config_interfaces(self, native_vlan=0):
+        result = [interface.build_config(native_vlan)
+                  for interface in self.interfaces]
+        return '\n'.join(result) + '\n'
 
 class Router(NetworkDevice):
-    def __init__(self, name):
-        super(Router, self).__init__(name)
+    def __init__(self, name, jinja_env):
+        super(Router, self).__init__(name, jinja_env)
         self.type = "router"   
 
 class Switch(NetworkDevice):
-    def __init__(self, name):
-        super(Switch, self).__init__(name)
+    def __init__(self, name, jinja_env):
+        super(Switch, self).__init__(name, jinja_env)
         self.type = "switch"
-        self.vlans = set()  
+        self.vlans = set()
+        self.native_vlan = 0
+
+    def add_vlan_from_interface(self, interface):
+        self.vlans.add(interface.vlan)
+
+    def set_vtp_mode(self, mode):
+        self.vtp_mode = mode
+
+    def set_stp_mode(self, mode):
+        self.stp_mode = mode
+
+    def add_additional_settings(self):
+        self.set_vtp_mode("transparent")
+        self.set_stp_mode("rapid-pvst")
+
+    def get_random_unused_vlan_number(self):
+        vlan_range = set(range(500, 1001)) - self.vlans
+        return random.sample(vlan_range, 1)
+
+
+    def build_config(self):
+        self.add_additional_settings()
+        config = "hostname {}\n".format(self.name)
+        if self.stp_mode:
+            config += "spanning-tree mode {}\n".format(self.stp_mode)
+        if self.vtp_mode:
+            config += "vtp mode {}\n".format(self.vtp_mode)
+        config += self.build_vlan_config()
+        config += self.build_config_interfaces(self.native_vlan)
+        config += self.generate_ssh_config()
+        return config
+
+    def build_vlan_config(self):
+        self.native_vlan = self.get_random_unused_vlan_number()[0]
+        self.vlans.add(self.native_vlan)
+        config = []
+        for vlan in sorted(self.vlans):
+            config.append("vlan {vlan_number}".format(vlan_number = vlan))
+            if vlan == self.native_vlan:
+                config.append(" name Native")
+            config.append("!")
+        return '\n'.join(config) + '\n'
 
 
 class Interface(object):
     def __init__(self, name, ip_address=None, vlan=None):
-        self.name = name
+        self.name = autocomplete_interface(name)
         self.up = True
         self.type = None
         self.ip_address = None
         if ip_address:
-            self.ip_address = ip_address
+            self.ip_address = IPAddress(ip_address)
         if vlan:
             if vlan == "trunk":
                 self.type = "trunk"
             else:
                 self.type = "access"
-                self.vlan = vlan
+                self.vlan = int(vlan)
 
-    def build_config(self):
+    def build_config(self, native_vlan):
         config = ["interface {name}".format(name = self.name)]
         if self.ip_address:
             config.append(" ip address {ip} {mask}"
@@ -448,12 +527,16 @@ class Interface(object):
             if self.type == "trunk":
                 config.append(" switchport trunk encapsulation dot1q")
                 config.append(" switchport mode trunk")
+                if native_vlan:
+                    config.append(" switchport trunk native vlan {vlan}"
+                                  .format(vlan = native_vlan))
                 config.append(" switchport nonegotiate")
             else:
                 config.append(" switchport mode access")
                 config.append(" switchport access vlan {vlan}"
                               .format(vlan = self.vlan))
                 config.append(" spanning-tree portfast")
+                config.append(" spanning-tree portfast bpduguard ")
         if self.up:
             config.append(" no shutdown")
         else:
@@ -466,3 +549,35 @@ class Interface(object):
 
     def __eq__(self, other):
         return self.name == other.name
+
+class Topology(object):
+
+    def __init__(self, json_file, jinja_env):
+        self.jinja_env = jinja_env
+        self.json = get_input_topology(json_file)
+        self.nodes = []
+        for node_json in self.json["topology"]["nodes"]:
+            if node_json['type'] == 'router':
+                node = Router(node_json['name'], jinja_env = self.jinja_env)
+            elif node_json['type'] == 'switch':
+                node = Switch(node_json['name'], jinja_env = self.jinja_env)
+            for interface_json in node_json['interfaces']:
+                interface = Interface(name=interface_json['name'],
+                                      ip_address=interface_json.get('ip'),
+                                      vlan=interface_json.get('vlan'))
+                node.add_interface(interface)
+            node.set_domain_name(self.json.get("options").get("domain-name"))
+            self.nodes.append(node)
+
+    def __str__(self):
+        return self.json.dumps()
+
+    def create_configs(self):
+        directory = "configs"
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
+        for node in self.nodes:
+            with  open('{path}/{filename}.cfg'
+                       .format(path=directory,
+                               filename = node.name), 'w') as f:
+                f.write(node.build_config())
