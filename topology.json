@@ -1,0 +1,78 @@
+{
+    "topology": {
+        "nodes": [
+            {
+                "name": "R1",
+                "type": "router",
+                "interfaces": [
+                    {
+                        "name": "fa0/1",
+                        "ip": "192.168.12.1/24",
+                        "routing": "eigrp"
+                    },
+                    {
+                        "name": "fa0/2.10",
+                        "ip": "192.168.10.1/24",
+                        "routing": "eigrp"
+                    },
+                    {
+                        "name": "fa0/2.20",
+                        "ip": "192.168.20.1/24",
+                        "routing": "eigrp"
+                    } 
+                ]
+            },
+            {
+                "name": "R2",
+                "type": "router",
+                "interfaces": [
+                    {
+                        "name": "fa0/1",
+                        "ip": "192.168.12.2/24",
+                        "routing": "eigrp"
+                    },
+                    {
+                        "name": "Lo0",
+                        "ip": "10.10.2.2/8",
+                        "routing": "eigrp"
+                    } 
+                ]
+            },
+            {
+                "name": "SW1",
+                "type": "switch",
+                "interfaces": [
+                    {
+                        "name": "fa0/1",
+                        "vlan": "trunk"
+                    },
+                    {
+                        "name": "fa0/2",
+                        "vlan": "10"
+                    },
+                    {
+                        "name": "fa0/3",
+                        "vlan": "20"
+                    } 
+                ]
+            }
+        ],
+        "links": [
+            {
+                "from": "R1",
+                "to": "R2",
+                "src_int": "fa0/1",
+                "dest_int": "fa0/1"
+            },
+            {
+                "from": "R1",
+                "to": "SW1",
+                "src_int": "fa0/2",
+                "dest_int": "fa0/1"
+            }
+        ]
+    },
+    "options": {
+        "domain-name" : "fh-koeln.de"
+    }
+}
