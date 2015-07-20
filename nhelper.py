@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # this module contains some basic helper functions
@@ -7,7 +7,8 @@ import re
 import random
 import json
 import os
-import jinja2
+import string
+import shutil
 
 ipv4 = [{}, {}]
 ipv6 = [{}, {}]
@@ -23,12 +24,17 @@ class_info = {'A': ['255.0.0.0', 'Class A'],
 IPV4_RE = re.compile(r'((\d+\.){3}\d+)(\/\d+| +(\d+\.){3}\d+| *- *(\d+\.){3}\d+)?')
 
 INTERFACES = ['FastEthernet', 'GigabitEthernet', 'Ethernet', 'Loopback',
-              'Serial', 'Vlan']
+              'Serial', 'Vlan', 'Tunnel', 'Portchannel']
+TEMPLATES_DIR = "templates"
+
+def generate_random_password(length=20):
+    return ''.join(random.SystemRandom().choice(string.ascii_letters + string.digits)
+                   for _ in range(length))
 
 def autocomplete_interface(full_name):
-    match = re.search('^([a-zA-Z]+)([0-9/].*)$', full_name)
+    match = re.search('^([a-zA-Z]+)([0-9\/].*)$', full_name)
     for interface in INTERFACES:
-        if interface.lower().startswith(match.group(1)):
+        if interface.lower().startswith(match.group(1).lower()):
             return '{interface}{number}'.format(interface = interface,
                                                 number = match.group(2))
 
@@ -52,7 +58,7 @@ def load_ip_address_description():
 def convert_mask(netmask, view=None):
     """Converts netmask to the desired form specified by the
     view paramater. If view is not specified, then the mask will be
-    converted into slash notation if it was previously specified 
+    converted into slash notation if it was previously specified
     in decimal form, or into decimal form otherwise.
     Input:
       netmask - string, mask needed to be converted
@@ -152,7 +158,7 @@ class IPAddress(object):
     if ip address belongs to the network
     what network is associated with current ip address and mask
     and so on
-    * TODO: ipv6 
+    * TODO: ipv6
     """
     class WrongIPError(Exception):
         """Raise if input ip notation is wrong
@@ -235,7 +241,7 @@ class IPAddress(object):
         If the ip address does not have mask, returns '0.0.0.0'
         Input:
           view - string, desired notation. Can be one of three:
-          'decimal', 'slash' or 'binary' 
+          'decimal', 'slash' or 'binary'
         """
         if not self.mask:
             return convert_mask('0.0.0.0', view)
@@ -261,7 +267,7 @@ class IPAddress(object):
             mask_binary = convert_mask(mask, 'binary').replace('.', '')
             return int(self.ip_binary, 2) & int(mask_binary, 2) == \
                                         int(self.ip_binary, 2)
-        
+
     def is_in_range(self, low, high):
         """Shows if ip belongs to the given ip address range (inclusive)
         Input:
@@ -353,7 +359,7 @@ class IPAddress(object):
 class Subnet(IPAddress):
     """Model of a subnet with a lot of helper functions,
     like: dividing subnet using VLSM, subnet summarization,
-    getting first, last, broadcast ip addresses and many others 
+    getting first, last, broadcast ip addresses and many others
     """
 
     class WrongSubnetError(Exception):
@@ -370,7 +376,7 @@ class Subnet(IPAddress):
             1.2.3.4 255.255.255.0
         Output: None
         """
-        super(Subnet, self).__init__(ip_address)        
+        super(Subnet, self).__init__(ip_address)
         if not self.is_subnet():
             raise Subnet.WrongSubnetError("This is not a valid "
                                           "network address")
@@ -408,58 +414,194 @@ class Subnet(IPAddress):
             return self
         return self.get_broadcast_address() - 1
 
+
 class NetworkDevice(object):
-    def __init__(self, name, jinja_env):
+    def __init__(self, name):
         self.name = name
         self.interfaces = []
         self.type = None
         self.domain_name = "cisco.com"
         self.vendor = "cisco"
-        self.jinja_env = jinja_env
-
+        self.users = {}
+        self.eigrp = False
+        self.ospf = False
+        self.static_routes = []
+        self.eigrp_as = None
+        self.ospf_process = None
+        self.ipv4_routing = False
+        self.syslog_server = ""
+        self.ntp_server = ""
+        self.ipsec_tunnels = []
+        self.next_acl_number = 150
+        self.json = {}
 
     def __str__(self):
         return self.name
+
+    def get_interface(self, name):
+        for interface in self.interfaces:
+            if interface.name == autocomplete_interface(name):
+                return interface
 
     def set_domain_name(self, domain):
         if domain:
             self.domain_name = domain
 
-    def generate_ssh_config(self):
-        template = self.jinja_env.get_template("cisco/ssh.cfg")
-        return template.render(domain=self.domain_name)
+    def set_ntp_server(self, server):
+        if server:
+            self.ntp_server = server
 
+    def set_syslog_server(self, server):
+        if server:
+            self.syslog_server = server
+
+    def parse_options_json(self, options):
+        self.domain_name = options.get("domain_name")
+        self.ntp_server = options.get("ntp_server")
+        self.syslog_server = options.get("syslog_server")
+        self.parse_users_json(options.get("users", []))
+
+    def parse_users_json(self, users):
+        self.users = {}
+        for user in users:
+            password = user.get('password')
+            if not password:
+                password = generate_random_password()
+            self.users[user['username']] = password
+
+    def generate_json(self):
+        self.json["name"] = self.name
+        self.json["type"] = self.type
+        self.json["ipv4_routing"] = self.ipv4_routing
+        self.json["ospf"] = self.ospf
+        self.json["ospf_process"] = self.ospf_process
+        self.json["eigrp"] = self.eigrp
+        self.json["eigrp_as"] = self.eigrp_as
+        interfaces_json = []
+        for interface in self.interfaces:
+            interfaces_json.append(interface.generate_json())
+        self.json["interfaces"] = interfaces_json
+        if self.static_routes:
+            self.json["static_routes"] = self.static_routes
+        return self.json
+
+
+    # def check_routing(self):
+    #     self.eigrp = [interface for interface in self.interfaces
+    #                   if interface.routing == 'eigrp']
+    #     self.ospf = [interface for interface in self.interfaces
+    #                   if interface.routing == 'ospf']
+
+    def generate_routing_config(self):
+        result = []
+        if self.ipv4_routing and self.eigrp:
+            result.append("router eigrp {}".format(self.eigrp_as))
+            for interface in self.interfaces:
+                if interface.eigrp:
+                    result.append(" network {} 0.0.0.0".format(interface.ip_address))
+            result.append(" passive-interface default")
+            for interface in self.interfaces:
+                if interface.eigrp and interface.eigrp_not_passive:
+                    result.append(" no passive-interface {}".format(interface.name))
+            result.append("!")
+        if self.ipv4_routing and self.ospf:
+            result.append("router ospf {}".format(self.ospf_process))
+            for interface in self.interfaces:
+                if interface.ospf:
+                    result.append(" network {} 0.0.0.0 area {}".format(interface.ip_address,
+                                                                       interface.ospf_area))
+            result.append(" passive-interface default")
+            for interface in self.interfaces:
+                if interface.ospf and interface.ospf_not_passive:
+                    result.append(" no passive-interface {}".format(interface.name))
+            result.append("!")
+        result.append('\n')
+        return '\n'.join(result)
+
+    def generate_ssh_config(self):
+        if self.vendor == 'cisco':
+            snippet_path = os.path.join(TEMPLATES_DIR, 'cisco/ssh.cfg')
+        with open(snippet_path) as f:
+            snippet = f.read()
+            return snippet.format(domain=self.domain_name)
+
+    def generate_static_routing_config(self):
+        config = []
+        for static_route in self.static_routes:
+            prefix = IPAddress(static_route.get("prefix"))
+            nexthop = static_route.get("nexthop")
+            config.append("ip route {} {} {}\n".format(prefix.ip,
+                                                      prefix.get_mask(),
+                                                      nexthop))
+        return ''.join(config)
 
     def build_config(self):
-        config = "hostname {name}\n".format(name = self.name)
-        config += self.build_config_interfaces()
-        config += self.generate_ssh_config()
-        return config
+        config = []
+        config.append("hostname {name}\n".format(name = self.name))
+        for tunnel in self.ipsec_tunnels:
+            config.append(tunnel.build_configuration(self))
+        config.append(self.build_config_interfaces())
+        config.append(self.generate_routing_config())
+        config.append(self.generate_static_routing_config())
+        config.append(self.build_config_users())
+        if self.ntp_server:
+            if self.vendor == 'cisco':
+                config.append("ntp server {}\n".format(self.ntp_server))
+        if self.syslog_server:
+            if self.vendor == 'cisco':
+                config.append("logging {}\n".format(self.syslog_server))
+        config.append(self.generate_ssh_config())
+        return ''.join(config)
 
     def add_interface(self, interface):
         if interface in self.interfaces:
             print("%s already exists" % interface)
         else:
             self.interfaces.append(interface)
-            if self.type == "switch" and interface.type == "access":
-                self.add_vlan_from_interface(interface)
+            if self.type == "switch":
+                if interface.type == "access":
+                    self.add_vlan_from_interface(interface)
+                elif 'Vlan' in interface.name:
+                    vlan_num = int(re.match("Vlan ?(\d+)", interface.name).group(1))
+                    self.vlans.add(vlan_num)
 
-    def build_config_interfaces(self, native_vlan=0):
-        result = [interface.build_config(native_vlan)
+    def build_config_interfaces(self, native_vlan=0, vlan_list=None):
+        if vlan_list is None:
+            vlan_list = []
+        vlan_list = sorted([str(vlan) for vlan in vlan_list])
+        result = [interface.build_config(native_vlan, vlan_list)
                   for interface in self.interfaces]
         return '\n'.join(result) + '\n'
 
+    def build_config_users(self):
+        if self.vendor == 'cisco':
+            snippet_path = os.path.join(TEMPLATES_DIR, 'cisco/users.cfg')
+        with open(snippet_path) as f:
+            snippet = f.read()
+            result = []
+            for user, password in self.users.items():
+                result.append(snippet.format(user=user, password=password))
+            result.append('')
+            return '\n'.join(result)
+
+
 class Router(NetworkDevice):
-    def __init__(self, name, jinja_env):
-        super(Router, self).__init__(name, jinja_env)
-        self.type = "router"   
+    def __init__(self, name):
+        super(Router, self).__init__(name)
+        self.type = "router"
+        self.ipv4_routing = True
+
 
 class Switch(NetworkDevice):
-    def __init__(self, name, jinja_env):
-        super(Switch, self).__init__(name, jinja_env)
+    def __init__(self, name):
+        super(Switch, self).__init__(name)
         self.type = "switch"
         self.vlans = set()
-        self.native_vlan = 0
+        self.routing = False
+        self.ipv4_routing = False
+        self.l3_int_number = 0
+        self.vtp_mode = "transparent"
+        self.stp_mode = "rapid-pvst"
 
     def add_vlan_from_interface(self, interface):
         self.vlans.add(interface.vlan)
@@ -470,46 +612,82 @@ class Switch(NetworkDevice):
     def set_stp_mode(self, mode):
         self.stp_mode = mode
 
-    def add_additional_settings(self):
-        self.set_vtp_mode("transparent")
-        self.set_stp_mode("rapid-pvst")
+    # def add_additional_settings(self):
+    #     self.set_vtp_mode("transparent")
+    #     self.set_stp_mode("rapid-pvst")
 
-    def get_random_unused_vlan_number(self):
-        vlan_range = set(range(500, 1001)) - self.vlans
-        return random.sample(vlan_range, 1)
+    def add_to_switch_group(self, switch_group):
+        switch_group.append(self)
+        for interface in self.interfaces:
+            if interface.other_end:
+                if interface.other_end.device.type == 'switch':
+                    neighbor_switch = interface.other_end.device
+                    if neighbor_switch not in switch_group:
+                        neighbor_switch.add_to_switch_group(switch_group)
+                elif interface.other_end.device.type == 'router':
+                    for subif in interface.other_end.children:
+                        self.vlans.add(subif.dot1q)
 
 
     def build_config(self):
-        self.add_additional_settings()
-        config = "hostname {}\n".format(self.name)
+        #self.check_routing()
+        #self.add_additional_settings()
+        config = []
+        config.append("hostname {}\n".format(self.name))
         if self.stp_mode:
-            config += "spanning-tree mode {}\n".format(self.stp_mode)
+            config.append("spanning-tree mode {}\n".format(self.stp_mode))
         if self.vtp_mode:
-            config += "vtp mode {}\n".format(self.vtp_mode)
-        config += self.build_vlan_config()
-        config += self.build_config_interfaces(self.native_vlan)
-        config += self.generate_ssh_config()
-        return config
+            config.append("vtp mode {}\n".format(self.vtp_mode))
+        config.append(self.build_vlan_config())
+        config.append(self.build_config_interfaces(self.native_vlan, self.vlans))
+        if self.ipv4_routing:
+            config.append("ip routing\n")
+        config.append(self.generate_routing_config())
+        config.append(self.generate_static_routing_config())
+        config.append(self.build_config_users())
+        if self.ntp_server:
+            config.append("ntp server {}\n".format(self.ntp_server))
+        if self.syslog_server:
+            config.append("logging {}\n".format(self.syslog_server))
+        config.append(self.generate_ssh_config())
+        return ''.join(config)
 
     def build_vlan_config(self):
-        self.native_vlan = self.get_random_unused_vlan_number()[0]
-        self.vlans.add(self.native_vlan)
         config = []
         for vlan in sorted(self.vlans):
             config.append("vlan {vlan_number}".format(vlan_number = vlan))
             if vlan == self.native_vlan:
                 config.append(" name Native")
             config.append("!")
-        return '\n'.join(config) + '\n'
+        config.append('')
+        return '\n'.join(config)
 
 
 class Interface(object):
-    def __init__(self, name, ip_address=None, vlan=None):
+    def __init__(self, name, ip_address=None, vlan=None, routing=None, device=None):
         self.name = autocomplete_interface(name)
         self.up = True
         self.type = None
         self.ip_address = None
+        self.ospf = False
+        self.ospf_area = None
+        self.ospf_not_passive = False
+        self.eigrp = False
+        self.eigrp_not_passive = False
+        self.routing = routing
+        self.device = device
+        self.crypto_map = None
+        self.switchport = False
+        self.dot1q = None
+        self.other_end = None
+        self.line = None
+        self.json = {}
+        self.parent = None
+        self.children = []
+        self.vlan = None
         if ip_address:
+            if self.device.type == 'switch':
+                self.device.l3_int_number += 1
             self.ip_address = IPAddress(ip_address)
         if vlan:
             if vlan == "trunk":
@@ -518,25 +696,56 @@ class Interface(object):
                 self.type = "access"
                 self.vlan = int(vlan)
 
-    def build_config(self, native_vlan):
-        config = ["interface {name}".format(name = self.name)]
+    def generate_json(self):
+        self.json["name"] = self.name
+        self.json["up"] = self.up
+        self.json["switchport"] = self.switchport
         if self.ip_address:
-            config.append(" ip address {ip} {mask}"
-            .format(ip = self.ip_address.ip, mask = self.ip_address.get_mask()))
-        if self.type:
+            self.json["ip"] = "{}{}".format(self.ip_address.ip,
+                                            convert_mask(self.ip_address.get_mask(), 'slash'))
+        else:
+            self.json["ip"] = None
+        self.json["ospf_enabled"] = self.ospf
+        self.json["ospf_area"] = self.ospf_area
+        self.json["ospf_not_passive"] = self.ospf_not_passive
+        self.json["eigrp_enabled"] = self.eigrp
+        self.json["eigrp_not_passive"] = self.eigrp_not_passive
+
+        if self.type == "trunk":
+            self.json["vlan"] = "trunk"
+        elif self.type == "access":
+            self.json["vlan"] = self.vlan
+        self.json["dot1q"] = self.dot1q
+
+        return self.json
+
+    def build_config(self, native_vlan=None, vlan_list=[]):
+        config = ["interface {}".format(self.name)]
+        if self.dot1q:
+            config.append(" encapsulation dot1q {}".format(self.dot1q))
+        if self.switchport:
             if self.type == "trunk":
                 config.append(" switchport trunk encapsulation dot1q")
                 config.append(" switchport mode trunk")
+                config.append(" switchport trunk allowed vlan {}"
+                              .format(','.join(vlan_list)))
                 if native_vlan:
                     config.append(" switchport trunk native vlan {vlan}"
                                   .format(vlan = native_vlan))
                 config.append(" switchport nonegotiate")
-            else:
+            elif self.type == "access":
                 config.append(" switchport mode access")
-                config.append(" switchport access vlan {vlan}"
-                              .format(vlan = self.vlan))
+                config.append(" switchport access vlan {}"
+                              .format(self.vlan))
                 config.append(" spanning-tree portfast")
                 config.append(" spanning-tree portfast bpduguard ")
+        elif self.ip_address:
+            if self.device.type == 'switch' and 'Ethernet' in self.name:
+                config.append(" no switchport")
+            config.append(" ip address {} {}".format(self.ip_address.ip,
+                                                     self.ip_address.get_mask()))
+            if self.crypto_map:
+                config.append(" crypto map {}".format(self.crypto_map))
         if self.up:
             config.append(" no shutdown")
         else:
@@ -550,32 +759,117 @@ class Interface(object):
     def __eq__(self, other):
         return self.name == other.name
 
-class Topology(object):
+class Tunnel(object):
+    def __init__(self, json, endpoints):
+        self.json = json
+        self.endpoints = endpoints
+        self.key = generate_random_password()
+        self.details = {}
+        self.find_missing_parts()
 
-    def __init__(self, json_file, jinja_env):
-        self.jinja_env = jinja_env
+    def other(self, router):
+        for endpoint in self.endpoints:
+            if endpoint is not router:
+                return endpoint
+
+    def find_missing_parts(self):
+        for router in self.endpoints:
+            details = {}
+            router.ipsec_tunnels.append(self)
+            other_router = self.other(router)
+            tunnel_src_int = router.get_interface(self.json[router.name]["tunnel_int"])
+            tunnel_src_int.crypto_map = "CMAP"
+            details["tunnel_src_int"] = tunnel_src_int
+            details["tunnel_dst_int"] = other_router.get_interface(self.json[other_router.name]["tunnel_int"])
+            details["src_traffic"] = Subnet(self.json[router.name]["encrypted_traffic"])
+            details["dst_traffic"] = Subnet(self.json[other_router.name]["encrypted_traffic"])
+            details["acl_number"] = router.next_acl_number
+            router.next_acl_number += 1
+            self.details[router.name] = details
+
+    def build_configuration(self, router):
+        if router.vendor == 'cisco':
+            snippet_path = os.path.join(TEMPLATES_DIR, 'cisco/ipsec_vpn.cfg')
+        with open(snippet_path) as f:
+            snippet = f.read()
+            return snippet.format(tunnel_key = self.key,
+                                  acl_num = self.details[router.name]["acl_number"],
+                                  tunnel_end_ip = self.details[router.name]["tunnel_dst_int"].ip_address,
+                                  src_ip = self.details[router.name]["src_traffic"].ip,
+                                  src_ip_wc = self.details[router.name]["src_traffic"].get_wildcard(),
+                                  dst_ip = self.details[router.name]["dst_traffic"].ip,
+                                  dst_ip_wc = self.details[router.name]["dst_traffic"].get_wildcard())
+
+class Topology(object):
+    def __init__(self, json_file):
         self.json = get_input_topology(json_file)
         self.nodes = []
+        self.broadcast_domains = []
+        self.switches = []
+        self.links = self.json['topology'].get('links')
+        self.index = {}
+        self.ipsec_tunnels = []
+        users =  self.parse_users(self.json.get("options").get("users", []))
         for node_json in self.json["topology"]["nodes"]:
             if node_json['type'] == 'router':
-                node = Router(node_json['name'], jinja_env = self.jinja_env)
+                node = Router(node_json['name'])
             elif node_json['type'] == 'switch':
-                node = Switch(node_json['name'], jinja_env = self.jinja_env)
+                node = Switch(node_json['name'])
+                self.switches.append(node)
+            node.json = node_json
             for interface_json in node_json['interfaces']:
                 interface = Interface(name=interface_json['name'],
                                       ip_address=interface_json.get('ip'),
-                                      vlan=interface_json.get('vlan'))
+                                      vlan=interface_json.get('vlan'),
+                                      routing=interface_json.get('routing'),
+                                      device = node)
                 node.add_interface(interface)
-            node.set_domain_name(self.json.get("options").get("domain-name"))
+            node.users = users
+            node.set_domain_name(self.json.get("options").get("domain_name"))
+            node.set_ntp_server(self.json.get("options").get("ntp_server"))
+            node.set_syslog_server(self.json.get("options").get("syslog_server"))
             self.nodes.append(node)
+            self.index[node.name] = node
+        self.calculate_topology()
+        self.parse_ipsec_tunnels(self.json.get("options").get("ipsec_tunnel", []))
+        self.parse_users(self.json.get("options").get("users", []))
+
+    def calculate_topology(self):
+        vlans = set()
+        vlans.add(1)
+        for switch in self.switches:
+            vlans |= switch.vlans
+        vlan_range = set(range(500, 1001)) - vlans
+        native_vlan = random.sample(vlan_range, 1)[0]
+        vlans.add(native_vlan)
+        for switch in self.switches:
+            switch.native_vlan = native_vlan
+            switch.vlans = vlans
+            if switch.l3_int_number > 1:
+                switch.routing = True
+
+    def parse_ipsec_tunnels(self, json):
+        for tunnel_json in json:
+            endpoints = [self.index[router] for router in tunnel_json.keys()]
+            tunnel = Tunnel(tunnel_json, endpoints)
+            self.ipsec_tunnels.append(tunnel)
+
+    def parse_users(self, users):
+        d = {}
+        for user in users:
+            password = user.get('password')
+            if not password:
+                password = generate_random_password()
+            d[user['username']] = password
+        return d
 
     def __str__(self):
         return self.json.dumps()
 
     def create_configs(self):
         directory = "configs"
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
+        shutil.rmtree(directory, ignore_errors=True)
+        os.makedirs(directory)
         for node in self.nodes:
             with  open('{path}/{filename}.cfg'
                        .format(path=directory,

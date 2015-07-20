@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1513</width>
+    <height>951</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>nhelper</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="1" column="1">
+    <widget class="QWidget" name="uiWorkAreaContainer" native="true">
+     <property name="maximumSize">
+      <size>
+       <width>2000</width>
+       <height>750</height>
+      </size>
+     </property>
+     <property name="layoutDirection">
+      <enum>Qt::LeftToRight</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <widget class="QGraphicsView" name="uiWorkArea">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="verticalScrollBarPolicy">
+         <enum>Qt::ScrollBarAsNeeded</enum>
+        </property>
+        <property name="horizontalScrollBarPolicy">
+         <enum>Qt::ScrollBarAsNeeded</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QWidget" name="uiButtonArea" native="true">
+     <widget class="QPushButton" name="uiAddRouterButton">
+      <property name="geometry">
+       <rect>
+        <x>110</x>
+        <y>80</y>
+        <width>112</width>
+        <height>34</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Add Router</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="uiAddSwitchButton">
+      <property name="geometry">
+       <rect>
+        <x>270</x>
+        <y>80</y>
+        <width>112</width>
+        <height>34</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Add Switch</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="uiAddTemplateButton">
+      <property name="geometry">
+       <rect>
+        <x>720</x>
+        <y>80</y>
+        <width>112</width>
+        <height>34</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Add template</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="uiGenerateCfgButton">
+      <property name="geometry">
+       <rect>
+        <x>1200</x>
+        <y>80</y>
+        <width>241</width>
+        <height>34</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Generate configs</string>
+      </property>
+     </widget>
+     <widget class="QToolButton" name="uiAddLinkButton">
+      <property name="geometry">
+       <rect>
+        <x>420</x>
+        <y>80</y>
+        <width>111</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Add Link</string>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+      <property name="checked">
+       <bool>false</bool>
+      </property>
+      <property name="autoRaise">
+       <bool>false</bool>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="uiGlobalOptions">
+      <property name="geometry">
+       <rect>
+        <x>1020</x>
+        <y>80</y>
+        <width>151</width>
+        <height>34</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Global options</string>
+      </property>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -159,7 +159,7 @@ if __name__ == '__main__':
     # sw1.add_interface(fa)
     # print(sw1.vlans)
     # print(sw1.build_config())
-    loader = jinja2.FileSystemLoader(searchpath="templates")
-    env = jinja2.Environment(loader=loader)
-    topo = Topology('topology.json', jinja_env=env)
+    topo = Topology('topology.json')
     topo.create_configs()
+
+

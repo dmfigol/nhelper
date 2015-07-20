@@ -1,78 +1,266 @@
 {
-    "topology": {
-        "nodes": [
+    "options": {
+        "domain_name": "fh-koeln.de",
+        "ntp_server": "5.6.7.8",
+        "syslog_server": "1.2.3.4",
+        "users": [
             {
-                "name": "R1",
-                "type": "router",
-                "interfaces": [
-                    {
-                        "name": "fa0/1",
-                        "ip": "192.168.12.1/24",
-                        "routing": "eigrp"
-                    },
-                    {
-                        "name": "fa0/2.10",
-                        "ip": "192.168.10.1/24",
-                        "routing": "eigrp"
-                    },
-                    {
-                        "name": "fa0/2.20",
-                        "ip": "192.168.20.1/24",
-                        "routing": "eigrp"
-                    } 
-                ]
+                "password": "3DyDZyDU5exHBtok8g3H",
+                "username": "dfigol"
             },
             {
-                "name": "R2",
-                "type": "router",
-                "interfaces": [
-                    {
-                        "name": "fa0/1",
-                        "ip": "192.168.12.2/24",
-                        "routing": "eigrp"
-                    },
-                    {
-                        "name": "Lo0",
-                        "ip": "10.10.2.2/8",
-                        "routing": "eigrp"
-                    } 
-                ]
-            },
-            {
-                "name": "SW1",
-                "type": "switch",
-                "interfaces": [
-                    {
-                        "name": "fa0/1",
-                        "vlan": "trunk"
-                    },
-                    {
-                        "name": "fa0/2",
-                        "vlan": "10"
-                    },
-                    {
-                        "name": "fa0/3",
-                        "vlan": "20"
-                    } 
-                ]
-            }
-        ],
-        "links": [
-            {
-                "from": "R1",
-                "to": "R2",
-                "src_int": "fa0/1",
-                "dest_int": "fa0/1"
-            },
-            {
-                "from": "R1",
-                "to": "SW1",
-                "src_int": "fa0/2",
-                "dest_int": "fa0/1"
+                "password": "cisco",
+                "username": "root"
             }
         ]
     },
-    "options": {
-        "domain-name" : "fh-koeln.de"
+    "topology": {
+        "links": [
+            {
+                "dst_int": "Ethernet0/1",
+                "dst_node": "R1",
+                "src_int": "Ethernet0/1",
+                "src_node": "R4"
+            },
+            {
+                "dst_int": "Ethernet0/1",
+                "dst_node": "R2",
+                "src_int": "Ethernet0/1",
+                "src_node": "SW1"
+            },
+            {
+                "dst_int": "Ethernet0/0",
+                "dst_node": "SW1",
+                "src_int": "Ethernet0/0",
+                "src_node": "R1"
+            },
+            {
+                "dst_int": "Ethernet0/0",
+                "dst_node": "R3",
+                "src_int": "Ethernet0/0",
+                "src_node": "R2"
+            }
+        ],
+        "nodes": [
+            {
+                "eigrp": false,
+                "eigrp_as": null,
+                "interfaces": [
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "10.0.1.1/24",
+                        "name": "Ethernet0/1",
+                        "ospf_area": 0,
+                        "ospf_enabled": true,
+                        "ospf_not_passive": false,
+                        "switchport": false,
+                        "up": true
+                    },
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": null,
+                        "name": "Ethernet0/0",
+                        "ospf_area": null,
+                        "ospf_enabled": false,
+                        "ospf_not_passive": false,
+                        "switchport": false,
+                        "up": true
+                    },
+                    {
+                        "dot1q": 12,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "10.0.12.1/24",
+                        "name": "Ethernet0/0.12",
+                        "ospf_area": 0,
+                        "ospf_enabled": true,
+                        "ospf_not_passive": true,
+                        "switchport": false,
+                        "up": true
+                    },
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "1.1.1.1/32",
+                        "name": "Loopback0",
+                        "ospf_area": 0,
+                        "ospf_enabled": true,
+                        "ospf_not_passive": false,
+                        "switchport": false,
+                        "up": true
+                    }
+                ],
+                "ipv4_routing": true,
+                "name": "R1",
+                "ospf": true,
+                "ospf_process": 1,
+                "type": "router"
+            },
+            {
+                "eigrp": false,
+                "eigrp_as": null,
+                "interfaces": [
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": null,
+                        "name": "Ethernet0/1",
+                        "ospf_area": null,
+                        "ospf_enabled": false,
+                        "ospf_not_passive": false,
+                        "switchport": true,
+                        "up": true,
+                        "vlan": "trunk"
+                    },
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": null,
+                        "name": "Ethernet0/0",
+                        "ospf_area": null,
+                        "ospf_enabled": false,
+                        "ospf_not_passive": false,
+                        "switchport": true,
+                        "up": true,
+                        "vlan": "trunk"
+                    }
+                ],
+                "ipv4_routing": false,
+                "name": "SW1",
+                "ospf": false,
+                "ospf_process": null,
+                "type": "switch"
+            },
+            {
+                "eigrp": false,
+                "eigrp_as": null,
+                "interfaces": [
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": null,
+                        "name": "Ethernet0/1",
+                        "ospf_area": null,
+                        "ospf_enabled": false,
+                        "ospf_not_passive": false,
+                        "switchport": false,
+                        "up": true
+                    },
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "10.0.23.2/24",
+                        "name": "Ethernet0/0",
+                        "ospf_area": 1,
+                        "ospf_enabled": true,
+                        "ospf_not_passive": true,
+                        "switchport": false,
+                        "up": true
+                    },
+                    {
+                        "dot1q": 12,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "10.0.12.2/24",
+                        "name": "Ethernet0/1.12",
+                        "ospf_area": 0,
+                        "ospf_enabled": true,
+                        "ospf_not_passive": true,
+                        "switchport": false,
+                        "up": true
+                    },
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "2.2.2.2/32",
+                        "name": "Loopback0",
+                        "ospf_area": 0,
+                        "ospf_enabled": true,
+                        "ospf_not_passive": false,
+                        "switchport": false,
+                        "up": true
+                    }
+                ],
+                "ipv4_routing": true,
+                "name": "R2",
+                "ospf": true,
+                "ospf_process": 1,
+                "type": "router"
+            },
+            {
+                "eigrp": false,
+                "eigrp_as": null,
+                "interfaces": [
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "10.0.23.3/24",
+                        "name": "Ethernet0/0",
+                        "ospf_area": 1,
+                        "ospf_enabled": true,
+                        "ospf_not_passive": true,
+                        "switchport": false,
+                        "up": true
+                    },
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "3.3.3.3/32",
+                        "name": "Loopback0",
+                        "ospf_area": 1,
+                        "ospf_enabled": true,
+                        "ospf_not_passive": false,
+                        "switchport": false,
+                        "up": true
+                    }
+                ],
+                "ipv4_routing": true,
+                "name": "R3",
+                "ospf": true,
+                "ospf_process": 1,
+                "type": "router"
+            },
+            {
+                "eigrp": false,
+                "eigrp_as": null,
+                "interfaces": [
+                    {
+                        "dot1q": null,
+                        "eigrp_enabled": false,
+                        "eigrp_not_passive": false,
+                        "ip": "10.0.1.4/24",
+                        "name": "Ethernet0/1",
+                        "ospf_area": null,
+                        "ospf_enabled": false,
+                        "ospf_not_passive": false,
+                        "switchport": false,
+                        "up": true
+                    }
+                ],
+                "ipv4_routing": true,
+                "name": "R4",
+                "ospf": false,
+                "ospf_process": null,
+                "static_routes": [
+                    {
+                        "nexthop": "10.0.1.1",
+                        "prefix": "0.0.0.0/0"
+                    }
+                ],
+                "type": "router"
+            }
+        ]
     }
 }
